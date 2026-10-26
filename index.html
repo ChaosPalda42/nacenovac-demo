@@ -1,0 +1,869 @@
+<!doctype html>
+<html lang="cs">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="robots" content="noindex">
+<style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0}img{max-width:100%}[hidden]{display:none!important}</style>
+</head>
+<body>
+<title>Naceňovač rozpisů</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+/* Layout: pracovní nástroj — horní lišta, jedna pracovní plocha, tabulka výsledků jako hlavní objekt. */
+:root {
+  --bg: #f3f4f2;
+  --surface: #ffffff;
+  --sunken: #e9ebe7;
+  --line: #d4d8d1;
+  --fg: #1d2420;
+  --muted: #5d6760;
+  --accent: #2a5d48;        /* zelená stavebního výkresu */
+  --accent-fg: #ffffff;
+  --accent-soft: #dceae2;
+  --mark: #f1c232;          /* měřická žlutá – jen pro „zkontrolovat" */
+  --mark-soft: #fbf0c9;
+  --mark-fg: #5a4300;
+  --bad: #a3392b;
+  --bad-soft: #f6dcd7;
+  --ok: #2a6b3a;
+  --ok-soft: #dcefdf;
+  --f-display: "Archivo", "Helvetica Neue", Arial, sans-serif;
+  --f-body: "IBM Plex Sans", "Segoe UI", Roboto, sans-serif;
+  --f-mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+  --r: 6px;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #141917; --surface: #1c2320; --sunken: #232b27; --line: #333d38;
+    --fg: #e4e9e5; --muted: #9aa69f; --accent: #6fb594; --accent-fg: #0e1612; --accent-soft: #233a30;
+    --mark: #e6b93a; --mark-soft: #3a3217; --mark-fg: #f3d98a;
+    --bad: #e58a7c; --bad-soft: #3d2420; --ok: #7cc58c; --ok-soft: #1f3324;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #141917; --surface: #1c2320; --sunken: #232b27; --line: #333d38;
+  --fg: #e4e9e5; --muted: #9aa69f; --accent: #6fb594; --accent-fg: #0e1612; --accent-soft: #233a30;
+  --mark: #e6b93a; --mark-soft: #3a3217; --mark-fg: #f3d98a;
+  --bad: #e58a7c; --bad-soft: #3d2420; --ok: #7cc58c; --ok-soft: #1f3324;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--fg); font-family: var(--f-body); font-size: 15px; line-height: 1.5; }
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--surface); }
+h1, h2, h3 { font-family: var(--f-display); text-wrap: balance; margin: 0; line-height: 1.2; }
+h2 { font-size: 1.35rem; font-weight: 700; }
+h3 { font-size: 1.02rem; font-weight: 600; }
+p { margin: 0; }
+.num { font-family: var(--f-mono); font-variant-numeric: tabular-nums; }
+.muted { color: var(--muted); }
+.small { font-size: .85rem; }
+.label { font-size: .72rem; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); font-weight: 600; }
+button { font: inherit; cursor: pointer; }
+button:focus-visible, a:focus-visible, select:focus-visible, .src:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.wrap { padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); max-width: 1240px; margin: 0 auto; }
+
+/* horní lišta */
+.top { background: var(--surface); border-bottom: 1px solid var(--line); position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; }
+.top .wrap { display: flex; align-items: center; gap: 20px; padding-block: 10px; flex-wrap: wrap; }
+.brand { display: flex; align-items: center; gap: 10px; font-family: var(--f-display); font-weight: 700; font-size: 1.05rem; }
+.brand svg { flex: none; }
+.tabs { display: flex; gap: 4px; }
+.tab { border: 0; background: none; color: var(--muted); padding: 7px 12px; border-radius: var(--r); font-weight: 500; }
+.tab[aria-selected="true"] { background: var(--accent-soft); color: var(--fg); }
+.spacer { flex: 1; }
+.userchip { display: flex; align-items: center; gap: 8px; font-size: .9rem; }
+.avatar { width: 28px; height: 28px; border-radius: 50%; background: var(--accent); color: var(--accent-fg); display: grid; place-items: center; font-size: .75rem; font-weight: 600; flex: none; }
+.demo-flag { font-size: .72rem; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; background: var(--mark-soft); color: var(--mark-fg); padding: 3px 8px; border-radius: 99px; }
+
+.btn { border: 1px solid var(--line); background: var(--surface); color: var(--fg); padding: 8px 14px; border-radius: var(--r); font-weight: 500; display: inline-flex; align-items: center; gap: 8px; }
+.btn:hover { border-color: var(--muted); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-fg); }
+.btn.primary:hover { filter: brightness(1.08); }
+.btn.ghost { border-color: transparent; background: none; color: var(--muted); }
+.btn:disabled { opacity: .5; cursor: default; }
+
+main { padding-block: 28px 64px; display: grid; gap: 24px; }
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 20px; min-width: 0; }
+
+/* přihlášení */
+.login { max-width: 520px; margin: 8vh auto 0; display: grid; gap: 20px; }
+.login .panel { display: grid; gap: 16px; }
+.who { display: grid; gap: 8px; }
+.who button { display: flex; align-items: center; gap: 12px; text-align: left; border: 1px solid var(--line); background: var(--surface); color: var(--fg); padding: 12px 14px; border-radius: var(--r); }
+.who button:hover { border-color: var(--accent); background: var(--accent-soft); }
+
+/* nahrání */
+.upload-grid { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); gap: 24px; align-items: start; }
+@media (max-width: 820px) { .upload-grid { grid-template-columns: 1fr; } }
+.drop { border: 2px dashed var(--line); border-radius: var(--r); padding: 36px 20px; text-align: center; display: grid; gap: 10px; justify-items: center; background: var(--sunken); transition: border-color .15s, background .15s; }
+.drop.over { border-color: var(--accent); background: var(--accent-soft); }
+.samples { display: grid; gap: 8px; }
+.sample { display: flex; gap: 12px; align-items: center; justify-content: space-between; border: 1px solid var(--line); border-radius: var(--r); padding: 10px 12px; flex-wrap: wrap; }
+.sample > div { min-width: 0; }
+.settings dl { display: grid; grid-template-columns: auto 1fr; gap: 8px 14px; margin: 0; font-size: .9rem; }
+.settings dt { color: var(--muted); }
+.settings dd { margin: 0; }
+.srcpill { display: inline-block; font-size: .78rem; border: 1px solid var(--line); padding: 1px 8px; border-radius: 99px; margin: 0 4px 4px 0; }
+
+/* zpracování */
+.steps { list-style: none; padding: 0; margin: 0; display: grid; gap: 2px; }
+.steps li { display: grid; grid-template-columns: 24px 1fr auto; gap: 12px; align-items: start; padding: 10px 0; border-bottom: 1px solid var(--line); }
+.steps li:last-child { border-bottom: 0; }
+.dot { width: 18px; height: 18px; border-radius: 50%; border: 2px solid var(--line); margin-top: 2px; }
+.steps li.run .dot { border-color: var(--accent); border-top-color: transparent; animation: spin .8s linear infinite; }
+.steps li.done .dot { border-color: var(--accent); background: var(--accent); }
+.steps li.wait { color: var(--muted); }
+@keyframes spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .steps li.run .dot { animation: none; background: var(--accent-soft); } }
+.detail { font-size: .85rem; color: var(--muted); }
+
+/* náhled tabulky architekta */
+.grid-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: var(--r); max-height: 340px; overflow-y: auto; }
+table { border-collapse: collapse; width: 100%; }
+.raw { font-size: .78rem; font-family: var(--f-mono); }
+.raw td, .raw th { border: 1px solid var(--line); padding: 3px 6px; white-space: nowrap; max-width: 260px; overflow: hidden; text-overflow: ellipsis; }
+.raw th { background: var(--sunken); color: var(--muted); font-weight: 500; position: sticky; top: 0; }
+.raw tr.hdr td { font-weight: 600; background: var(--accent-soft); }
+.raw td.c-desc { box-shadow: inset 3px 0 0 var(--accent); }
+.raw td.c-fill { background: var(--mark-soft); }
+.legend { display: flex; gap: 16px; flex-wrap: wrap; font-size: .8rem; color: var(--muted); }
+.legend span::before { content: ""; display: inline-block; width: 10px; height: 10px; margin-right: 6px; vertical-align: -1px; border-radius: 2px; }
+.legend .l-h::before { background: var(--accent-soft); }
+.legend .l-d::before { background: var(--accent); }
+.legend .l-f::before { background: var(--mark-soft); border: 1px solid var(--mark); }
+.mapping { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: .88rem; }
+.mapping b { font-weight: 600; }
+
+/* výsledek */
+.summary { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0; border: 1px solid var(--line); border-radius: var(--r); background: var(--surface); }
+.summary > div { padding: 14px 18px; border-right: 1px solid var(--line); display: grid; gap: 2px; }
+.summary > div:last-child { border-right: 0; }
+.summary .big { font-family: var(--f-display); font-size: 1.5rem; font-weight: 600; font-variant-numeric: tabular-nums; }
+@media (max-width: 720px) { .summary { grid-template-columns: repeat(2, minmax(0, 1fr)); } .summary > div:nth-child(2) { border-right: 0; } .summary > div:nth-child(-n+2) { border-bottom: 1px solid var(--line); } }
+.res-head { display: flex; justify-content: space-between; align-items: end; gap: 16px; flex-wrap: wrap; }
+.actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.filterbar { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.chip { border: 1px solid var(--line); background: var(--surface); color: var(--fg); padding: 4px 10px; border-radius: 99px; font-size: .82rem; }
+.chip[aria-pressed="true"] { background: var(--fg); color: var(--bg); border-color: var(--fg); }
+
+.res { font-size: .86rem; min-width: 1080px; }
+.res th { text-align: left; font-weight: 600; font-size: .72rem; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); padding: 8px 10px; border-bottom: 1px solid var(--line); background: var(--sunken); position: sticky; top: 0; z-index: 1; }
+.res td { padding: 8px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+.res td.r, .res th.r { text-align: right; }
+.res tr.sec td { background: var(--sunken); font-weight: 600; font-family: var(--f-display); padding-top: 10px; }
+.res tr.flag td:first-child { box-shadow: inset 4px 0 0 var(--mark); }
+.res tr.miss td:first-child { box-shadow: inset 4px 0 0 var(--bad); }
+.res .grid-wrap { max-height: 70vh; }
+.desc { max-width: 300px; }
+.match { font-size: .78rem; color: var(--muted); margin-top: 2px; }
+.src { display: block; width: 100%; text-align: right; border: 1px solid transparent; background: none; color: var(--fg); padding: 3px 6px; border-radius: 4px; }
+.src:hover { border-color: var(--line); background: var(--sunken); }
+.src.chosen { border-color: var(--accent); background: var(--accent-soft); font-weight: 600; }
+.src small { display: block; font-size: .72rem; color: var(--muted); font-family: var(--f-body); font-weight: 400; }
+.src.stale small { color: var(--bad); }
+.none { color: var(--muted); text-align: right; display: block; padding: 3px 6px; }
+.status { display: inline-block; font-size: .75rem; font-weight: 600; padding: 2px 8px; border-radius: 99px; white-space: nowrap; }
+.st-ok { background: var(--ok-soft); color: var(--ok); }
+.st-flag { background: var(--mark-soft); color: var(--mark-fg); }
+.st-miss { background: var(--bad-soft); color: var(--bad); }
+.st-man { background: var(--accent-soft); color: var(--accent); }
+.why { font-size: .76rem; color: var(--muted); margin-top: 3px; max-width: 200px; }
+
+/* e-mail a disk */
+.after { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); gap: 24px; }
+@media (max-width: 820px) { .after { grid-template-columns: 1fr; } }
+.mail { border: 1px solid var(--line); border-radius: var(--r); overflow: hidden; }
+.mail header { background: var(--sunken); padding: 10px 14px; font-size: .84rem; display: grid; gap: 2px; }
+.mail .body { padding: 14px; font-size: .9rem; display: grid; gap: 10px; }
+.attach { display: inline-flex; gap: 8px; align-items: center; border: 1px solid var(--line); border-radius: var(--r); padding: 6px 10px; font-size: .84rem; }
+.path { font-family: var(--f-mono); font-size: .8rem; background: var(--sunken); padding: 8px 10px; border-radius: 4px; overflow-wrap: anywhere; }
+
+/* archiv */
+.arch-bar { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; justify-content: space-between; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: var(--r); overflow: hidden; }
+.seg button { border: 0; background: var(--surface); color: var(--muted); padding: 6px 12px; font-size: .86rem; }
+.seg button[aria-pressed="true"] { background: var(--accent-soft); color: var(--fg); font-weight: 600; }
+select { font: inherit; padding: 6px 10px; border-radius: var(--r); border: 1px solid var(--line); background: var(--surface); color: var(--fg); }
+.group { display: grid; gap: 0; }
+.group h3 { padding: 18px 0 8px; font-size: .95rem; }
+.arow .num { white-space: nowrap; }
+.arow { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) 100px 120px 110px auto; gap: 12px; align-items: center; padding: 10px 12px; border: 1px solid var(--line); border-bottom: 0; background: var(--surface); }
+.arow:first-of-type { border-radius: var(--r) var(--r) 0 0; }
+.arow:last-child { border-bottom: 1px solid var(--line); border-radius: 0 0 var(--r) var(--r); }
+.arow:only-of-type { border-radius: var(--r); }
+.arow .fn { font-weight: 500; overflow-wrap: anywhere; }
+@media (max-width: 760px) { .arow { grid-template-columns: 1fr 1fr; } .arow .fn { grid-column: 1 / -1; } }
+.tag { font-size: .7rem; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); border: 1px solid var(--line); border-radius: 99px; padding: 0 6px; margin-left: 6px; vertical-align: 1px; }
+
+.note { font-size: .84rem; color: var(--muted); border-left: 3px solid var(--line); padding-left: 12px; }
+.toast { position: fixed; bottom: calc(20px + env(safe-area-inset-bottom, 0px)); left: 50%; transform: translateX(-50%); background: var(--fg); color: var(--bg); padding: 10px 16px; border-radius: var(--r); font-size: .9rem; z-index: 20; max-width: calc(100% - 32px); }
+.err { color: var(--bad); font-size: .9rem; }
+</style>
+
+<div id="app"></div>
+<div id="toast" class="toast" hidden></div>
+
+<script>
+"use strict";
+// ---------- Demo uživatelé ----------
+const USERS = [
+  { id: "jana", name: "Jana Svobodová", role: "Rozpočtářka", mail: "jana.svobodova@firma-demo.cz" },
+  { id: "petr", name: "Petr Dvořák", role: "Nákup", mail: "petr.dvorak@firma-demo.cz" },
+  { id: "eva", name: "Eva Malá", role: "Vedoucí zakázek", mail: "eva.mala@firma-demo.cz" },
+];
+const initials = n => n.split(" ").map(s => s[0]).join("");
+
+// ---------- Smyšlený katalog (DEMO) ----------
+// kw = kořeny slov, podle kterých se položka pozná; unit = jednotka, v jaké se zboží prodává; p = cena bez DPH
+const CAT = [
+  { kw: ["sadrokart", "desk", "gkb"], name: "Sádrokartonová deska GKB 12,5 mm", unit: "m2", p: 89 },
+  { kw: ["sadrokart", "impregn"], name: "Sádrokartonová deska GKBI 12,5 mm (impregnovaná)", unit: "m2", p: 128 },
+  { kw: ["profil", "cw"], name: "Profil CW 75, 0,6 mm", unit: "m", p: 62 },
+  { kw: ["profil", "uw"], name: "Profil UW 75, 0,6 mm", unit: "m", p: 54 },
+  { kw: ["mineral", "vlna"], name: "Minerální vlna 50 mm, akustická", unit: "m2", p: 98 },
+  { kw: ["eps", "fasad"], name: "Fasádní polystyren EPS 70 F, 160 mm", unit: "m2", p: 245 },
+  { kw: ["xps"], name: "Extrudovaný polystyren XPS, 100 mm", unit: "m2", p: 395 },
+  { kw: ["porotherm", "30"], name: "Cihla Porotherm 30 Profi", unit: "ks", p: 78 },
+  { kw: ["porotherm", "44"], name: "Cihla Porotherm 44 T Profi", unit: "ks", p: 142 },
+  { kw: ["ytong", "150"], name: "Pórobetonová tvárnice Ytong P2-500, 150 mm", unit: "ks", p: 89 },
+  { kw: ["beton", "c25"], name: "Transportbeton C25/30 XC2", unit: "m3", p: 2950 },
+  { kw: ["kari", "sit"], name: "Kari síť 6/150, 2 × 3 m", unit: "ks", p: 690 },
+  { kw: ["dlazb", "keram"], name: "Keramická dlažba rektifikovaná 60 × 60", unit: "m2", p: 680 },
+  { kw: ["obklad", "keram"], name: "Keramický obklad bílý lesk 30 × 60", unit: "m2", p: 540 },
+  { kw: ["lepidl", "flex"], name: "Flexibilní lepidlo na obklady C2TE", unit: "kg", p: 19 },
+  { kw: ["penetrac"], name: "Penetrace hloubková", unit: "l", p: 72 },
+  { kw: ["vinyl"], name: "Vinylová podlaha click, tř. 33", unit: "m2", p: 520 },
+  { kw: ["lamin", "podlah"], name: "Laminátová podlaha AC4, 8 mm", unit: "m2", p: 390 },
+  { kw: ["dver", "interier"], name: "Interiérové dveře plné 80 cm, bílé", unit: "ks", p: 3890 },
+  { kw: ["zarub", "oblozk"], name: "Obložková zárubeň 80 cm", unit: "ks", p: 2650 },
+  { kw: ["okn", "plast"], name: "Plastové okno 1200 × 1500, trojsklo", unit: "ks", p: 8900 },
+  { kw: ["parapet", "vnitr"], name: "Vnitřní parapet 250 mm, bílý", unit: "m", p: 420 },
+  { kw: ["cyky", "2,5"], name: "Kabel CYKY-J 3 × 2,5", unit: "m", p: 39 },
+  { kw: ["cyky", "1,5"], name: "Kabel CYKY-J 3 × 1,5", unit: "m", p: 28 },
+  { kw: ["zasuvk"], name: "Zásuvka jednonásobná, bílá", unit: "ks", p: 145 },
+  { kw: ["vypinac"], name: "Vypínač jednopólový, bílý", unit: "ks", p: 160 },
+  { kw: ["svitidl", "led"], name: "LED panel 60 × 60, 40 W", unit: "ks", p: 1290 },
+  { kw: ["trubk", "ppr"], name: "Trubka PPR 20 × 3,4", unit: "m", p: 46 },
+  { kw: ["wc", "zaves"], name: "Závěsné WC rimless, sedátko softclose", unit: "ks", p: 4990 },
+  { kw: ["umyvadl"], name: "Umyvadlo keramické 60 cm", unit: "ks", p: 2390 },
+  { kw: ["bateri", "umyvadl"], name: "Umyvadlová baterie stojánková", unit: "ks", p: 1690 },
+  { kw: ["malb", "interier"], name: "Interiérová malba bílá (otěruvzdorná)", unit: "m2", p: 38 },
+  { kw: ["hydroizol", "sterk"], name: "Hydroizolační stěrka jednosložková", unit: "m2", p: 210 },
+  { kw: ["osb"], name: "OSB/3 deska 18 mm, P+D", unit: "m2", p: 230 },
+  { kw: ["kvh", "hranol"], name: "Hranol KVH 60 × 160 mm", unit: "m", p: 210 },
+  { kw: ["silikon", "sanit"], name: "Silikon sanitární 310 ml", unit: "ks", p: 149 },
+  { kw: ["omitk", "jadr"], name: "Jádrová omítka vápenocementová (materiál)", unit: "m2", p: 118 },
+];
+const SHOPS = [
+  { id: "s1", name: "E-shop 1", host: "stavebniny-1.example" },
+  { id: "s2", name: "E-shop 2", host: "hobby-2.example" },
+  { id: "s3", name: "E-shop 3", host: "elektro-3.example" },
+];
+const RULE = { pohodaMaxMonths: 6, maxDiff: 0.15, vat: 0.21 };
+
+// ---------- Pomocné ----------
+const fold = s => String(s ?? "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+const tokens = s => fold(s).replace(/(\d)\s*,\s*(\d)/g, "$1,$2").split(/[^a-z0-9,]+/).filter(Boolean);
+function hash(str) { let h = 2166136261; for (const c of str) { h ^= c.charCodeAt(0); h = Math.imul(h, 16777619); } return h >>> 0; }
+function rng(seed) { let s = seed || 1; return () => { s = Math.imul(s ^ (s >>> 15), 2246822507) ^ Math.imul(s ^ (s >>> 13), 3266489909); s ^= s >>> 16; return (s >>> 0) / 4294967296; }; }
+const kc = v => v == null ? "—" : v.toLocaleString("cs-CZ", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + " Kč";
+const kc0 = v => v.toLocaleString("cs-CZ", { maximumFractionDigits: 0 }) + " Kč";
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const fmtDate = d => d.toLocaleDateString("cs-CZ", { day: "numeric", month: "numeric", year: "numeric" });
+const fmtTime = d => d.toLocaleTimeString("cs-CZ", { hour: "2-digit", minute: "2-digit" });
+function normUnit(u) {
+  const f = fold(u).replace(/[\s.]/g, "");
+  if (/^(m2|m²|m\^2|metr2)$/.test(f) || f === "m²") return "m2";
+  if (/^(m3|m³)$/.test(f)) return "m3";
+  if (/^(m|bm|mb|metr)$/.test(f)) return "m";
+  if (/^(ks|kus|kusu|pc|pcs)$/.test(f)) return "ks";
+  if (/^(kg)$/.test(f)) return "kg";
+  if (/^(l|litr)$/.test(f)) return "l";
+  if (/^(kpl|soubor|sada)$/.test(f)) return "kpl";
+  return f || "?";
+}
+const UNIT_LABEL = { m2: "m²", m3: "m³", m: "m", ks: "ks", kg: "kg", l: "l", kpl: "kpl" };
+const toNum = v => { if (typeof v === "number") return v; const s = String(v ?? "").replace(/\s/g, "").replace(",", "."); return s && !isNaN(+s) ? +s : null; };
+
+// ---------- 1) Pochopení tabulky ----------
+const COLS = {
+  desc: /(popis|nazev|polozk|predmet|text|specifikace polozky)/,
+  spec: /(specifik|upresn|parametr)/,
+  unit: /^(mj|m\.j\.|jedn|j\.|jednotk|merna)/,
+  qty: /(mnozstv|pocet|vymer|qty)/,
+  unitPrice: /(cena.*(mj|jedn|za)|jedn.*cena|j\.\s*cena|cena\/)/,
+  total: /(celkem|cena celk|soucet|suma|cena bez dph celk)/,
+};
+function detect(aoa) {
+  let best = null;
+  for (let r = 0; r < Math.min(aoa.length, 40); r++) {
+    const row = aoa[r] || [], found = {};
+    row.forEach((cell, c) => {
+      const t = fold(cell).trim(); if (!t || t.length > 60) return;
+      if (found.unitPrice == null && COLS.unitPrice.test(t)) { found.unitPrice = c; return; }
+      if (found.total == null && COLS.total.test(t)) { found.total = c; return; }
+      if (found.qty == null && COLS.qty.test(t)) { found.qty = c; return; }
+      if (found.unit == null && COLS.unit.test(t)) { found.unit = c; return; }
+      if (found.desc == null && COLS.desc.test(t)) { found.desc = c; return; }
+      if (found.spec == null && COLS.spec.test(t)) { found.spec = c; return; }
+    });
+    const score = Object.keys(found).length + (found.desc != null ? 2 : 0) + (found.qty != null ? 2 : 0);
+    if (!best || score > best.score) best = { r, found, score };
+  }
+  if (!best || best.found.desc == null || best.found.qty == null) return null;
+  const f = best.found, width = Math.max(...aoa.map(r => r.length));
+  let next = width;
+  if (f.unitPrice == null) f.unitPrice = next++, f.addedUnitPrice = true;
+  if (f.total == null) f.total = next++, f.addedTotal = true;
+  f.note = next;
+  // řádky: položka = má popis a číselné množství; oddíl = má text, ale ne množství
+  const rows = [];
+  for (let r = best.r + 1; r < aoa.length; r++) {
+    const row = aoa[r] || [];
+    const desc = String(row[f.desc] ?? "").trim();
+    const spec = f.spec != null ? String(row[f.spec] ?? "").trim() : "";
+    const qty = toNum(row[f.qty]);
+    const firstText = row.find(x => String(x ?? "").trim() !== "");
+    if (desc && qty != null && qty > 0) rows.push({ kind: "item", r, desc, spec, qty, unit: f.unit != null ? String(row[f.unit] ?? "").trim() : "" });
+    else if ((desc || firstText) && qty == null && !/celkem|soucet|rekapit/.test(fold(desc || firstText))) rows.push({ kind: "sec", r, desc: String(desc || row.filter(x => String(x ?? "").trim()).join(" ")).trim() });
+  }
+  return { header: best.r, cols: f, rows };
+}
+
+// ---------- 2–4) Zdroje cen a výběr ----------
+function matchCatalog(text) {
+  const tk = tokens(text);
+  let best = null, second = null;
+  for (const e of CAT) {
+    const hit = e.kw.filter(k => tk.some(t => t.startsWith(k) || (/\d/.test(k) && t.includes(k)))).length;
+    const score = hit / e.kw.length;
+    if (score === 0) continue;
+    const cand = { e, score };
+    if (!best || score > best.score) { second = best; best = cand; } else if (!second || score > second.score) second = cand;
+  }
+  if (!best || best.score < 0.5) return null;
+  return { ...best, ambiguous: !!(second && second.score === best.score) };
+}
+function priceItem(it, today) {
+  const m = matchCatalog(it.desc + " " + it.spec);
+  const out = { ...it, match: m, pohoda: null, shops: {}, chosen: null, chosenFrom: null, status: "ok", why: [] };
+  if (!m) { out.status = "miss"; out.why.push("Nenalezeno v žádném zdroji"); return out; }
+  const R = rng(hash(m.e.name + "|" + it.desc));
+  if (R() < 0.82) {
+    const months = 1 + Math.floor(R() * 13);
+    const d = new Date(today); d.setMonth(d.getMonth() - months); d.setDate(1 + Math.floor(R() * 27));
+    out.pohoda = { price: Math.round(m.e.p * (0.9 + R() * 0.1) * 100) / 100, date: d, months, doc: "PŘ-" + (2025 + (months < 10 ? 1 : 0)) + "-" + String(100 + Math.floor(R() * 800)).padStart(4, "0") };
+  }
+  for (const s of SHOPS) {
+    const elektro = /kabel|zasuv|vypin|led/.test(fold(m.e.name));
+    const avail = s.id === "s3" ? (elektro ? 0.95 : 0.25) : 0.8;
+    if (R() < avail) {
+      const withVat = Math.round(m.e.p * (1 + RULE.vat) * (0.97 + R() * 0.2) * 100) / 100;
+      out.shops[s.id] = { withVat, net: Math.round(withVat / (1 + RULE.vat) * 100) / 100, unit: m.e.unit, title: m.e.name };
+    }
+  }
+  const itemUnit = normUnit(it.unit);
+  out.unitOk = itemUnit === m.e.unit || itemUnit === "?";
+  decide(out);
+  return out;
+}
+function cheapestShop(o) {
+  let best = null;
+  for (const [id, s] of Object.entries(o.shops)) if (!best || s.net < best.net) best = { id, ...s };
+  return best;
+}
+function decide(o) {
+  o.why = []; o.status = "ok";
+  const cheap = cheapestShop(o);
+  if (!o.unitOk) {
+    o.status = "flag";
+    o.why.push(`Jiná jednotka: tabulka ${esc(o.unit || "?")}, zboží se prodává v ${UNIT_LABEL[o.match.e.unit]}`);
+  }
+  if (o.pohoda && o.pohoda.months <= RULE.pohodaMaxMonths) { o.chosen = o.pohoda.price; o.chosenFrom = "pohoda"; }
+  else if (cheap) { o.chosen = cheap.net; o.chosenFrom = cheap.id; if (o.pohoda) o.why.push(`Nákup v Pohodě je ${o.pohoda.months} měs. starý, použit nejlevnější e-shop`); }
+  else if (o.pohoda) { o.chosen = o.pohoda.price; o.chosenFrom = "pohoda"; o.status = "flag"; o.why.push(`Jen stará cena z Pohody (${o.pohoda.months} měs.), e-shopy zboží nemají`); }
+  else { o.status = "miss"; o.why.push("Nenalezeno v žádném zdroji"); }
+  if (o.chosen != null && cheap && o.chosenFrom === "pohoda") {
+    const diff = Math.abs(cheap.net - o.chosen) / o.chosen;
+    if (diff > RULE.maxDiff) { o.status = "flag"; o.why.push(`Pohoda a e-shop se liší o ${(Math.round(diff * 1000) / 10).toLocaleString("cs-CZ")} %`); }
+  }
+  if (o.match.score < 1 || o.match.ambiguous) { if (o.status === "ok") o.status = "flag"; o.why.push("Nejistá shoda názvu, ověřte zboží"); }
+  if (!o.unitOk) o.chosen = o.chosen; // cena se zapíše, ale řádek zůstává ke kontrole
+}
+
+// ---------- 5) Zápis do souboru ----------
+function buildOutput(job) {
+  const wb = XLSX.read(job.bytes, { type: "array" });
+  const ws = wb.Sheets[wb.SheetNames[0]];
+  const range = XLSX.utils.decode_range(ws["!ref"]);
+  const R0 = range.s.r, C0 = range.s.c, c = job.det.cols;
+  const addr = (r, col) => XLSX.utils.encode_cell({ r: R0 + r, c: C0 + col });
+  const hdr = job.det.header;
+  if (c.addedUnitPrice) ws[addr(hdr, c.unitPrice)] = { t: "s", v: "Cena za MJ (bez DPH)" };
+  if (c.addedTotal) ws[addr(hdr, c.total)] = { t: "s", v: "Cena celkem (bez DPH)" };
+  ws[addr(hdr, c.note)] = { t: "s", v: "Zdroj ceny (agent)" };
+  for (const it of job.items) {
+    if (it.kind !== "item") continue;
+    const ua = addr(it.r, c.unitPrice), qa = addr(it.r, c.qty), ta = addr(it.r, c.total);
+    if (it.chosen != null) {
+      ws[ua] = { t: "n", v: it.chosen, z: '#,##0.00' };
+      ws[ta] = { t: "n", v: Math.round(it.chosen * it.qty * 100) / 100, f: `${qa}*${ua}`, z: '#,##0.00' };
+    }
+    ws[addr(it.r, c.note)] = { t: "s", v: noteFor(it) };
+  }
+  range.e.c = Math.max(range.e.c, C0 + c.note);
+  ws["!ref"] = XLSX.utils.encode_range(range);
+  // druhý list: všechny nalezené ceny
+  const sheet2 = [["Řádek", "Položka", "MJ", "Množství", "Shoda v katalogu", "Pohoda – cena", "Pohoda – nákup", ...SHOPS.map(s => s.name + " (bez DPH)"), "Zvolená cena", "Zdroj", "Stav", "Poznámka"]];
+  for (const it of job.items) if (it.kind === "item") sheet2.push([
+    it.r + R0 + 1, it.desc, it.unit, it.qty, it.match ? it.match.e.name : "",
+    it.pohoda ? it.pohoda.price : "", it.pohoda ? fmtDate(it.pohoda.date) : "",
+    ...SHOPS.map(s => it.shops[s.id] ? it.shops[s.id].net : ""),
+    it.chosen ?? "", srcName(it.chosenFrom), STATUS[it.status], it.why.join("; "),
+  ]);
+  const ws2 = XLSX.utils.aoa_to_sheet(sheet2);
+  ws2["!cols"] = [{ wch: 7 }, { wch: 44 }, { wch: 6 }, { wch: 10 }, { wch: 40 }, { wch: 12 }, { wch: 12 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 12 }, { wch: 12 }, { wch: 14 }, { wch: 50 }];
+  if (wb.SheetNames.includes("Přehled agenta")) delete wb.Sheets["Přehled agenta"], wb.SheetNames.splice(wb.SheetNames.indexOf("Přehled agenta"), 1);
+  XLSX.utils.book_append_sheet(wb, ws2, "Přehled agenta");
+  return XLSX.write(wb, { bookType: "xlsx", type: "array" });
+}
+const STATUS = { ok: "V pořádku", flag: "Zkontrolovat", miss: "Nenalezeno", man: "Upraveno ručně" };
+const srcName = id => id === "pohoda" ? "Pohoda" : (SHOPS.find(s => s.id === id)?.name ?? "");
+function noteFor(it) {
+  if (it.chosen == null) return "NENALEZENO – doplňte ručně";
+  const base = it.chosenFrom === "pohoda" ? `Pohoda, nákup ${fmtDate(it.pohoda.date)}` : `${srcName(it.chosenFrom)} (cena bez DPH)`;
+  return it.status === "ok" ? base : `${base} – ${STATUS[it.status].toUpperCase()}: ${it.why.join("; ")}`;
+}
+
+// ---------- Vzorové tabulky od architekta (smyšlené) ----------
+function sampleA() {
+  const aoa = [
+    ["Rodinný dům Lísková – interiéry a dokončovací práce"],
+    ["Investor: (demo)", "", "", "Zpracoval: Ing. arch. (demo)", "", "", "Datum: 10/2026"],
+    ["Výkaz výměr – položky k ocenění"],
+    [],
+    ["Č.", "Kód", "Popis položky", "MJ", "Množství", "Jedn. cena", "Cena celkem", "Poznámka"],
+    ["", "", "1  SÁDROKARTONOVÉ KONSTRUKCE"],
+    [1, "SDK-01", "Sádrokartonová deska GKB 12,5 mm – příčky", "m2", 186.4, "", "", ""],
+    [2, "SDK-02", "Sádrokartonová deska impregnovaná – koupelny", "m2", 42, "", "", "zelená"],
+    [3, "SDK-03", "Profil CW 75", "m", 312, "", "", ""],
+    [4, "SDK-04", "Profil UW 75", "m", 128, "", "", ""],
+    [5, "SDK-05", "Minerální vlna do příček 50 mm", "m2", 93.2, "", "", ""],
+    ["", "", "2  PODLAHY A OBKLADY"],
+    [6, "POD-01", "Keramická dlažba 60×60 rektifikovaná", "m2", 64.5, "", "", "odstín dle vzorkování"],
+    [7, "POD-02", "Vinylová podlaha click – obytné místnosti", "m2", 118, "", "", ""],
+    [8, "POD-03", "Keramický obklad koupelny", "m2", 58.6, "", "", ""],
+    [9, "POD-04", "Flexibilní lepidlo na dlažbu", "kg", 520, "", "", ""],
+    [10, "POD-05", "Hydroizolační stěrka sprchy", "m2", 22, "", "", ""],
+    ["", "", "3  VÝPLNĚ OTVORŮ"],
+    [11, "VO-01", "Interiérové dveře plné 80 cm", "ks", 9, "", "", ""],
+    [12, "VO-02", "Obložková zárubeň 80", "ks", 9, "", "", ""],
+    [13, "VO-03", "Vnitřní parapet bílý", "bm", 14.4, "", "", ""],
+    ["", "", "4  ELEKTRO A ZTI"],
+    [14, "EL-01", "Kabel CYKY 3x2,5", "m", 420, "", "", "zásuvkové okruhy"],
+    [15, "EL-02", "Kabel CYKY 3x1,5", "m", 260, "", "", "světelné okruhy"],
+    [16, "EL-03", "Zásuvka 230 V bílá", "ks", 46, "", "", ""],
+    [17, "EL-04", "Vypínač řaz. 1", "ks", 21, "", "", ""],
+    [18, "ZTI-01", "Závěsné WC vč. sedátka", "ks", 2, "", "", ""],
+    [19, "ZTI-02", "Umyvadlo 60 cm", "ks", 3, "", "", ""],
+    [20, "ZTI-03", "Nerezové madlo atyp dle detailu D12", "kpl", 1, "", "", "výroba na míru"],
+    ["", "", "5  MALBY"],
+    [21, "MAL-01", "Interiérová malba bílá 2×", "m2", 640, "", "", ""],
+    [22, "MAL-02", "Penetrace pod malbu", "l", 48, "", "", ""],
+    [],
+    ["", "", "CELKEM BEZ DPH", "", "", "", "", ""],
+  ];
+  return { aoa, file: "RD_Liskova_vykaz_vymer.xlsx", title: "RD Lísková – výkaz výměr", info: "8 sloupců, hlavička projektu, 5 oddílů, 22 položek" };
+}
+function sampleB() {
+  const aoa = [
+    ["STUDIO FORMA – Rekonstrukce kanceláří, 2. NP"],
+    [],
+    ["Pol.", "Název", "Specifikace", "Počet", "J.", "Cena za MJ (Kč)", "Celkem (Kč)"],
+    ["A", "Stavební část"],
+    ["A.1", "Porotherm 30", "doplnění nadpraží", 120, "ks", "", ""],
+    ["A.2", "Ytong 150", "nové příčky", 340, "ks", "", ""],
+    ["A.3", "Kari síť", "pod podlahu", 54, "m2", "", ""],
+    ["A.4", "OSB deska", "18 mm, podlaha archivu", 36, "m2", "", ""],
+    ["A.5", "XPS izolace", "100 mm, sokl", 18, "m2", "", ""],
+    ["B", "Dokončovací práce"],
+    ["B.1", "Laminátová podlaha", "AC4, dub světlý", 210, "m2", "", ""],
+    ["B.2", "Malba interiér", "bílá, 2 vrstvy", 780, "m2", "", ""],
+    ["B.3", "Silikon sanitární", "kuchyňky", 12, "ks", "", ""],
+    ["C", "Elektro"],
+    ["C.1", "LED svítidlo", "panel 60×60 do podhledu", 38, "ks", "", ""],
+    ["C.2", "Kabel CYKY 3x1,5", "", 540, "m", "", ""],
+    ["C.3", "Zásuvka", "dvojitá do parapetního kanálu", 64, "ks", "", ""],
+    ["C.4", "Datový rozvaděč 19\"", "dle projektu slaboproudu", 1, "kpl", "", ""],
+  ];
+  return { aoa, file: "Forma_kancelare_2NP.xlsx", title: "Kanceláře Forma – rozpis", info: "7 sloupců, popis rozdělený do dvou, jiné pořadí, 12 položek" };
+}
+const SAMPLES = { A: sampleA, B: sampleB };
+function sampleBytes(key) {
+  const s = SAMPLES[key]();
+  const ws = XLSX.utils.aoa_to_sheet(s.aoa);
+  ws["!cols"] = s.aoa[4]?.length === 8 ? [{ wch: 4 }, { wch: 8 }, { wch: 46 }, { wch: 5 }, { wch: 9 }, { wch: 11 }, { wch: 12 }, { wch: 22 }] : [{ wch: 5 }, { wch: 22 }, { wch: 30 }, { wch: 7 }, { wch: 5 }, { wch: 14 }, { wch: 12 }];
+  const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "Výkaz");
+  return { bytes: new Uint8Array(XLSX.write(wb, { bookType: "xlsx", type: "array" })), name: s.file };
+}
+
+// ---------- Zpracování ----------
+function analyse(bytes) {
+  const wb = XLSX.read(bytes, { type: "array" });
+  const ws = wb.Sheets[wb.SheetNames[0]];
+  const aoa = XLSX.utils.sheet_to_json(ws, { header: 1, defval: "", raw: true, blankrows: true });
+  return { aoa, det: detect(aoa), sheet: wb.SheetNames[0] };
+}
+function runEngine(job, today) {
+  job.items = job.det.rows.map(r => r.kind === "item" ? priceItem(r, today) : r);
+  return job;
+}
+
+// ---------- Stav aplikace ----------
+const store = {
+  get(k, d) { try { const v = localStorage.getItem("nacenovac:" + k); return v ? JSON.parse(v) : d; } catch { return d; } },
+  set(k, v) { try { localStorage.setItem("nacenovac:" + k, JSON.stringify(v)); } catch {} },
+};
+const S = {
+  user: null, view: "upload", job: null, step: -1, filter: "all",
+  archGroup: "date", archUser: "all",
+  archive: [],
+};
+const DAY = 864e5;
+function seedArchive() {
+  const now = new Date();
+  const at = (d, h, m) => { const x = new Date(now.getTime() - d * DAY); x.setHours(h, m, 0, 0); return x.toISOString(); };
+  return [
+    { id: "x1", user: "jana", at: at(2, 9, 14), file: "RD_Liskova_vykaz_vymer.xlsx", sample: "A", items: 22, check: 0, total: 0, example: true },
+    { id: "x2", user: "petr", at: at(3, 13, 40), file: "Forma_kancelare_2NP.xlsx", sample: "B", items: 15, check: 0, total: 0, example: true },
+    { id: "x3", user: "eva", at: at(6, 16, 5), file: "RD_Liskova_vykaz_vymer_rev1.xlsx", sample: "A", items: 22, check: 0, total: 0, example: true },
+    { id: "x4", user: "jana", at: at(9, 10, 22), file: "Forma_kancelare_2NP_puvodni.xlsx", sample: "B", items: 15, check: 0, total: 0, example: true },
+  ].map(e => { const j = makeJob(sampleBytes(e.sample).bytes, e.file, e.user, new Date(e.at)); return { ...e, items: j.stats.items, check: j.stats.check, total: j.stats.total }; });
+}
+function makeJob(bytes, name, userId, at) {
+  const a = analyse(bytes);
+  const job = { bytes, name, user: userId, at, ...a };
+  if (!a.det) return job;
+  runEngine(job, at);
+  job.stats = stats(job);
+  return job;
+}
+function stats(job) {
+  const its = job.items.filter(i => i.kind === "item");
+  return {
+    items: its.length,
+    priced: its.filter(i => i.chosen != null).length,
+    check: its.filter(i => i.status === "flag" || i.status === "miss").length,
+    miss: its.filter(i => i.status === "miss").length,
+    total: its.reduce((s, i) => s + (i.chosen != null ? i.chosen * i.qty : 0), 0),
+    fromPohoda: its.filter(i => i.chosenFrom === "pohoda").length,
+    fromShop: its.filter(i => i.chosenFrom && i.chosenFrom !== "pohoda").length,
+  };
+}
+function storagePath(job) {
+  const d = job.at, u = USERS.find(x => x.id === job.user);
+  const y = d.getFullYear(), m = String(d.getMonth() + 1).padStart(2, "0"), dd = String(d.getDate()).padStart(2, "0");
+  return `/Volumes/Data/Nacenovac/${y}/${m}/${u.mail.split("@")[0]}/${y}-${m}-${dd}_${job.name.replace(/\.xlsx?$/i, "")}_naceneno.xlsx`;
+}
+const outName = n => n.replace(/\.xlsx?$/i, "") + "_naceneno.xlsx";
+
+// ---------- Vykreslení ----------
+const $app = document.getElementById("app");
+function toast(msg) { const t = document.getElementById("toast"); t.textContent = msg; t.hidden = false; clearTimeout(toast.t); toast.t = setTimeout(() => t.hidden = true, 3200); }
+const LOGO = `<svg width="26" height="26" viewBox="0 0 26 26" aria-hidden="true"><rect x="1" y="1" width="24" height="24" rx="5" fill="var(--accent)"/><path d="M6 8h14M6 13h14M6 18h8M15 18h5" stroke="var(--accent-fg)" stroke-width="2" stroke-linecap="round"/><circle cx="19" cy="18" r="0" /></svg>`;
+
+function render() {
+  if (!S.user) return renderLogin();
+  const u = USERS.find(x => x.id === S.user);
+  $app.innerHTML = `
+  <div class="top"><div class="wrap">
+    <div class="brand">${LOGO}<span>Naceňovač</span></div>
+    <span class="demo-flag">Demo · smyšlené ceny</span>
+    <nav class="tabs" role="tablist">
+      <button class="tab" role="tab" aria-selected="${S.view !== "archive"}" data-go="upload">Nové nacenění</button>
+      <button class="tab" role="tab" aria-selected="${S.view === "archive"}" data-go="archive">Archiv</button>
+    </nav>
+    <div class="spacer"></div>
+    <div class="userchip"><span class="avatar">${initials(u.name)}</span><span>${esc(u.name)}<br><span class="muted small">${esc(u.role)}</span></span>
+      <button class="btn ghost small" id="logout">Odhlásit</button></div>
+  </div></div>
+  <main class="wrap" id="main"></main>`;
+  $app.querySelectorAll("[data-go]").forEach(b => b.onclick = () => { S.view = b.dataset.go; if (S.view === "upload") S.job = null; render(); });
+  document.getElementById("logout").onclick = () => { S.user = null; S.job = null; S.view = "upload"; render(); };
+  const main = document.getElementById("main");
+  if (S.view === "archive") renderArchive(main);
+  else if (S.job && S.step < 99) renderProcessing(main);
+  else if (S.job) renderResult(main);
+  else renderUpload(main);
+}
+
+function renderLogin() {
+  $app.innerHTML = `<div class="wrap"><div class="login">
+    <div class="brand" style="font-size:1.4rem">${LOGO}<span>Naceňovač</span></div>
+    <div class="panel">
+      <div><h2>Přihlášení</h2><p class="muted small" style="margin-top:4px">V ostré verzi se zaměstnanci přihlásí firemním účtem. V demu stačí vybrat, za koho se chcete podívat.</p></div>
+      <div class="who">${USERS.map(u => `<button data-u="${u.id}"><span class="avatar">${initials(u.name)}</span><span><b>${esc(u.name)}</b><br><span class="muted small">${esc(u.role)}</span></span></button>`).join("")}</div>
+    </div>
+    <p class="note">Ukázka pro schůzku. Ceny, e-shopy i Pohoda jsou smyšlené, nic se nikam neodesílá a nahraný soubor se zpracuje jen v tomto prohlížeči.</p>
+  </div></div>`;
+  $app.querySelectorAll("[data-u]").forEach(b => b.onclick = () => { S.user = b.dataset.u; render(); });
+}
+
+function renderUpload(main) {
+  main.innerHTML = `
+  <div><h2>Nové nacenění</h2><p class="muted" style="margin-top:4px">Nahrajte tabulku od architekta. Agent najde položky, dohledá ceny a vyplněný soubor pošle e-mailem.</p></div>
+  <div class="upload-grid">
+    <div class="panel" style="display:grid;gap:18px">
+      <label class="drop" id="drop" for="file">
+        <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="1.6" aria-hidden="true"><path d="M12 16V4m0 0-4 4m4-4 4 4"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg>
+        <b>Přetáhněte sem soubor .xlsx nebo .xls</b>
+        <span class="muted small">nebo klikněte a vyberte ho z počítače</span>
+        <input type="file" id="file" accept=".xlsx,.xls" hidden>
+      </label>
+      <div id="uperr" class="err" hidden></div>
+      <div class="samples">
+        <span class="label">Nebo vyzkoušejte na vzorové tabulce</span>
+        ${Object.keys(SAMPLES).map(k => { const s = SAMPLES[k](); return `<div class="sample"><div><b>${esc(s.title)}</b><br><span class="muted small">${esc(s.file)} · ${esc(s.info)}</span></div><button class="btn primary" data-sample="${k}">Nacenit</button></div>`; }).join("")}
+      </div>
+    </div>
+    <div class="panel settings" style="display:grid;gap:14px">
+      <h3>Jak agent vybírá cenu</h3>
+      <dl>
+        <dt>Zdroje</dt><dd><span class="srcpill">Pohoda – poslední nákup</span>${SHOPS.map(s => `<span class="srcpill">${s.name}</span>`).join("")}</dd>
+        <dt>Přednost</dt><dd>Nákup z Pohody, pokud není starší než ${RULE.pohodaMaxMonths} měsíců. Jinak nejlevnější e-shop.</dd>
+        <dt>DPH</dt><dd>Ceny e-shopů se přepočítají na ceny bez DPH (${RULE.vat * 100} %).</dd>
+        <dt>Kontrola</dt><dd>Řádek se označí, když se zdroje liší o víc než ${RULE.maxDiff * 100} %, nesedí jednotka nebo si agent není jistý shodou.</dd>
+        <dt>Výstup</dt><dd>Původní soubor s vyplněnou cenou za MJ, vzorcem pro cenu celkem a sloupcem se zdrojem ceny. Navíc list „Přehled agenta“.</dd>
+      </dl>
+      <p class="note">Pravidla jsou návrh k probrání s klientem. V ostré verzi je nastaví správce.</p>
+    </div>
+  </div>`;
+  const drop = document.getElementById("drop"), file = document.getElementById("file");
+  const take = async f => {
+    const err = document.getElementById("uperr");
+    if (!f) return;
+    if (!/\.xlsx?$/i.test(f.name)) { err.hidden = false; err.textContent = "Tenhle soubor neumím přečíst. Nahrajte tabulku ve formátu .xlsx nebo .xls."; return; }
+    try { start(new Uint8Array(await f.arrayBuffer()), f.name); }
+    catch (e) { err.hidden = false; err.textContent = "Soubor se nepodařilo otevřít. Zkontrolujte, že není poškozený nebo zaheslovaný."; }
+  };
+  file.onchange = () => take(file.files[0]);
+  ["dragenter", "dragover"].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.add("over"); }));
+  ["dragleave", "drop"].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.remove("over"); }));
+  drop.addEventListener("drop", e => take(e.dataTransfer.files[0]));
+  main.querySelectorAll("[data-sample]").forEach(b => b.onclick = () => { const s = sampleBytes(b.dataset.sample); start(s.bytes, s.name); });
+}
+
+function start(bytes, name) {
+  const job = makeJob(bytes, name, S.user, new Date());
+  if (!job.det) {
+    const err = document.getElementById("uperr");
+    err.hidden = false; err.textContent = "V tabulce jsem nenašel sloupec s popisem položek a sloupec s množstvím. V ostré verzi by ji agent přečetl jazykovým modelem; v demu poznává jen běžné názvy sloupců.";
+    return;
+  }
+  S.job = job; S.step = 0; S.filter = "all"; render();
+  const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const delays = reduce ? [250, 250, 250, 250, 250, 250, 250] : [1100, 1300, 1700, 900, 800, 600, 700];
+  let i = 0;
+  const tick = () => {
+    if (S.job !== job) return;
+    S.step = ++i;
+    if (i >= STEPS.length) {
+      S.step = 99;
+      S.archive.unshift({ id: "j" + Date.now(), user: job.user, at: job.at.toISOString(), file: job.name, items: job.stats.items, check: job.stats.check, total: job.stats.total, live: job });
+      render(); return;
+    }
+    render(); setTimeout(tick, delays[i]);
+  };
+  setTimeout(tick, delays[0]);
+}
+const STEPS = [
+  { t: "Čtu tabulku", d: j => `Záhlaví na řádku ${j.det.header + 1}, nalezeno ${j.stats.items} položek v ${j.items.filter(i => i.kind === "sec").length} oddílech` },
+  { t: "Hledám poslední nákupy v Pohodě", d: j => `${j.items.filter(i => i.pohoda).length} z ${j.stats.items} položek se v minulosti nakupovalo` },
+  { t: "Prohledávám e-shopy", d: j => SHOPS.map(s => `${s.name}: ${j.items.filter(i => i.shops && i.shops[s.id]).length}`).join(" · ") },
+  { t: "Porovnávám zdroje a vybírám cenu", d: j => `${j.stats.check} položek označeno k ruční kontrole` },
+  { t: "Zapisuji ceny a vzorce do tabulky", d: j => `${j.stats.priced} cen za MJ, vzorec množství × cena u každého řádku` },
+  { t: "Ukládám na disk Mac mini", d: j => storagePath(j) },
+  { t: "Posílám e-mail", d: j => USERS.find(u => u.id === j.user).mail },
+];
+
+function colLetter(c) { return XLSX.utils.encode_col(c); }
+function rawPreview(job) {
+  const c = job.det.cols, a = job.aoa, width = Math.max(c.note, ...a.map(r => r.length - 1)) + 1;
+  const rows = a.slice(0, Math.min(a.length, job.det.header + 26));
+  return `<div class="grid-wrap"><table class="raw"><thead><tr><th></th>${Array.from({ length: width }, (_, i) => `<th>${colLetter(i)}${i >= (Math.max(...a.map(r => r.length))) ? " (nový)" : ""}</th>`).join("")}</tr></thead><tbody>
+  ${rows.map((r, ri) => `<tr class="${ri === job.det.header ? "hdr" : ""}"><th>${ri + 1}</th>${Array.from({ length: width }, (_, ci) => {
+    const v = r[ci];
+    const cls = ci === c.desc && ri > job.det.header ? "c-desc" : (ci === c.unitPrice || ci === c.total) && ri > job.det.header && job.det.rows.some(x => x.r === ri && x.kind === "item") ? "c-fill" : "";
+    return `<td class="${cls}" title="${esc(v)}">${esc(v)}</td>`;
+  }).join("")}</tr>`).join("")}
+  </tbody></table></div>`;
+}
+function mappingLine(job) {
+  const c = job.det.cols, L = i => colLetter(i);
+  const parts = [["Popis", c.desc], ...(c.spec != null ? [["Upřesnění", c.spec]] : []), ["MJ", c.unit], ["Množství", c.qty], ["Cena za MJ", c.unitPrice, c.addedUnitPrice], ["Cena celkem", c.total, c.addedTotal], ["Zdroj ceny", c.note, true]];
+  return `<div class="mapping">${parts.filter(p => p[1] != null).map(p => `<span>${p[0]}: <b>sloupec ${L(p[1])}</b>${p[2] ? ' <span class="muted">(přidám)</span>' : ""}</span>`).join("")}</div>`;
+}
+
+function renderProcessing(main) {
+  const j = S.job;
+  main.innerHTML = `
+  <div><h2>Naceňuji ${esc(j.name)}</h2><p class="muted" style="margin-top:4px">Obvykle to trvá několik minut. Okno můžete zavřít, výsledek přijde e-mailem.</p></div>
+  <div class="upload-grid">
+    <div class="panel"><ol class="steps">${STEPS.map((s, i) => `<li class="${i < S.step ? "done" : i === S.step ? "run" : "wait"}"><span class="dot"></span><div><b>${s.t}</b>${i < S.step ? `<div class="detail">${esc(s.d(j))}</div>` : ""}</div><span class="muted small num">${i < S.step ? "hotovo" : ""}</span></li>`).join("")}</ol></div>
+    <div class="panel" style="display:grid;gap:12px;min-width:0">
+      <h3>Co agent v tabulce našel</h3>
+      ${mappingLine(j)}
+      <div class="legend"><span class="l-h">řádek záhlaví</span><span class="l-d">sloupec s položkami</span><span class="l-f">sem doplní ceny</span></div>
+      ${rawPreview(j)}
+    </div>
+  </div>`;
+}
+
+function srcCell(it, id) {
+  if (id === "pohoda") {
+    if (!it.pohoda) return `<span class="none">—</span>`;
+    const stale = it.pohoda.months > RULE.pohodaMaxMonths;
+    return `<button class="src num ${it.chosenFrom === "pohoda" ? "chosen" : ""} ${stale ? "stale" : ""}" data-pick="pohoda" data-r="${it.r}" title="Doklad ${it.pohoda.doc}">${kc(it.pohoda.price)}<small>${fmtDate(it.pohoda.date)}${stale ? " · stará" : ""}</small></button>`;
+  }
+  const s = it.shops?.[id];
+  if (!s) return `<span class="none">—</span>`;
+  return `<button class="src num ${it.chosenFrom === id ? "chosen" : ""}" data-pick="${id}" data-r="${it.r}" title="${esc(s.title)}">${kc(s.net)}<small>${kc(s.withVat)} s DPH</small></button>`;
+}
+function renderResult(main) {
+  const j = S.job, st = j.stats = stats(j), u = USERS.find(x => x.id === j.user);
+  const visible = j.items.filter(i => S.filter === "all" || i.kind === "sec" || (S.filter === "check" ? (i.status === "flag" || i.status === "miss") : i.status === S.filter || (S.filter === "ok" && i.status === "man")));
+  const rows = visible.filter((i, k) => i.kind === "item" || (visible[k + 1] && visible[k + 1].kind === "item"));
+  main.innerHTML = `
+  <div class="res-head">
+    <div><span class="label">Naceněno · ${fmtDate(j.at)} ${fmtTime(j.at)} · ${esc(u.name)}</span><h2 style="margin-top:4px">${esc(j.name)}</h2></div>
+    <div class="actions">
+      <button class="btn primary" id="dl">Stáhnout vyplněnou tabulku</button>
+      <button class="btn" data-go2="upload">Nacenit další</button>
+    </div>
+  </div>
+  <div class="summary">
+    <div><span class="label">Položek</span><span class="big">${st.items}</span><span class="muted small">${st.fromPohoda}× Pohoda, ${st.fromShop}× e-shop</span></div>
+    <div><span class="label">Naceněno</span><span class="big">${st.priced}</span><span class="muted small">z ${st.items} položek</span></div>
+    <div><span class="label">Ke kontrole</span><span class="big" style="color:${st.check ? "var(--mark-fg)" : "var(--ok)"}">${st.check}</span><span class="muted small">${st.miss} bez ceny</span></div>
+    <div><span class="label">Celkem bez DPH</span><span class="big">${kc0(st.total)}</span><span class="muted small">${kc0(st.total * (1 + RULE.vat))} s DPH</span></div>
+  </div>
+  <div class="panel" style="display:grid;gap:14px;padding:16px">
+    <div class="res-head">
+      <div class="filterbar" role="group" aria-label="Filtr položek">
+        ${[["all", "Vše"], ["check", "Ke kontrole"], ["ok", "V pořádku"]].map(([k, l]) => `<button class="chip" aria-pressed="${S.filter === k}" data-f="${k}">${l}</button>`).join("")}
+      </div>
+      <p class="muted small">Klikněte na kteroukoli cenu a agent ji použije místo své volby.</p>
+    </div>
+    <div class="grid-wrap"><table class="res">
+      <thead><tr><th>Položka z tabulky</th><th>MJ</th><th class="r">Množství</th><th class="r">Pohoda</th>${SHOPS.map(s => `<th class="r">${s.name}</th>`).join("")}<th class="r">Cena za MJ</th><th class="r">Celkem</th><th>Stav</th></tr></thead>
+      <tbody>${rows.map(it => it.kind === "sec" ? `<tr class="sec"><td colspan="${7 + SHOPS.length}">${esc(it.desc)}</td></tr>` : `
+        <tr class="${it.status === "flag" ? "flag" : it.status === "miss" ? "miss" : ""}">
+          <td class="desc"><div>${esc(it.desc)}${it.spec ? ` <span class="muted">– ${esc(it.spec)}</span>` : ""}</div>${it.match ? `<div class="match">↳ ${esc(it.match.e.name)}</div>` : ""}</td>
+          <td>${esc(it.unit)}</td>
+          <td class="r num">${it.qty.toLocaleString("cs-CZ")}</td>
+          <td>${srcCell(it, "pohoda")}</td>
+          ${SHOPS.map(s => `<td>${srcCell(it, s.id)}</td>`).join("")}
+          <td class="r num"><b>${kc(it.chosen)}</b></td>
+          <td class="r num">${it.chosen != null ? kc(it.chosen * it.qty) : "—"}</td>
+          <td><span class="status st-${it.status}">${STATUS[it.status]}</span>${it.why.length ? `<div class="why">${it.why.join("<br>")}</div>` : ""}</td>
+        </tr>`).join("")}</tbody>
+    </table></div>
+  </div>
+  <div class="after">
+    <div class="panel" style="display:grid;gap:12px">
+      <h3>E-mail pro uživatele</h3>
+      <div class="mail">
+        <header><span><span class="muted">Komu:</span> ${esc(u.mail)}</span><span><span class="muted">Předmět:</span> Naceněno: ${esc(j.name)} (${st.check} ke kontrole)</span></header>
+        <div class="body">
+          <p>Dobrý den,</p>
+          <p>tabulka <b>${esc(j.name)}</b> je naceněná. Z ${st.items} položek má cenu ${st.priced}, celkem ${kc0(st.total)} bez DPH.</p>
+          ${st.check ? `<p><b>${st.check} položek je potřeba zkontrolovat</b> (v tabulce jsou označené ve sloupci „Zdroj ceny“). Ceny můžete upravit přímo v aplikaci.</p>` : ""}
+          <span class="attach">📎 ${esc(outName(j.name))}</span>
+        </div>
+      </div>
+      <p class="note">V demu se e-mail neodesílá, jen ukazuje, jak bude vypadat.</p>
+    </div>
+    <div class="panel" style="display:grid;gap:12px;align-content:start">
+      <h3>Uloženo na disk Mac mini</h3>
+      <div class="path">${esc(storagePath(j))}</div>
+      <p class="muted small">Originál od architekta se ukládá vedle, beze změny. Oba soubory najdete v Archivu.</p>
+      <details><summary class="small">Jak agent tabulku přečetl</summary><div style="display:grid;gap:10px;margin-top:10px">${mappingLine(j)}</div></details>
+    </div>
+  </div>`;
+  main.querySelectorAll("[data-go2]").forEach(b => b.onclick = () => { S.job = null; S.view = "upload"; render(); });
+  main.querySelectorAll("[data-f]").forEach(b => b.onclick = () => { S.filter = b.dataset.f; render(); });
+  main.querySelectorAll("[data-pick]").forEach(b => b.onclick = () => {
+    const it = j.items.find(x => x.kind === "item" && x.r === +b.dataset.r), id = b.dataset.pick;
+    it.chosen = id === "pohoda" ? it.pohoda.price : it.shops[id].net; it.chosenFrom = id; it.status = "man";
+    it.why = [`Cenu vybral(a) ${u.name}`];
+    const a = S.archive.find(x => x.live === j); if (a) { const s = stats(j); a.check = s.check; a.total = s.total; }
+    render(); toast(`Použita cena ${kc(it.chosen)} (${srcName(id)})`);
+  });
+  document.getElementById("dl").onclick = download;
+}
+async function download() {
+  const j = S.job, btn = document.getElementById("dl");
+  const data = new Uint8Array(buildOutput(j));
+  const dl = await (window.claude?.use?.("downloads") ?? null);
+  if (!dl) {
+    try { const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([data], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" })); a.download = outName(j.name); a.click(); }
+    catch { toast("Stažení tady není dostupné."); }
+    return;
+  }
+  btn.disabled = true;
+  try { await dl.save({ filename: outName(j.name), data }); toast("Tabulka uložena."); }
+  catch (e) { if (e?.code !== "declined") toast("Stažení se nepodařilo, zkuste to znovu za chvíli."); }
+  finally { btn.disabled = false; }
+}
+
+function renderArchive(main) {
+  let list = S.archive.filter(a => S.archUser === "all" || a.user === S.archUser);
+  list.sort((a, b) => b.at.localeCompare(a.at));
+  const groups = new Map();
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  for (const a of list) {
+    const d = new Date(a.at);
+    let key;
+    if (S.archGroup === "user") key = USERS.find(u => u.id === a.user).name;
+    else { const d0 = new Date(d); d0.setHours(0, 0, 0, 0); const diff = Math.round((today - d0) / DAY); key = diff === 0 ? "Dnes" : diff === 1 ? "Včera" : diff < 7 ? "Tento týden" : "Starší"; }
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(a);
+  }
+  main.innerHTML = `
+  <div><h2>Archiv nacenění</h2><p class="muted" style="margin-top:4px">Všechny zpracované tabulky uložené na Mac mini. Řádky označené „ukázka“ jsou smyšlené.</p></div>
+  <div class="arch-bar">
+    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+      <span class="label">Seskupit</span>
+      <div class="seg"><button data-g="date" aria-pressed="${S.archGroup === "date"}">Podle data</button><button data-g="user" aria-pressed="${S.archGroup === "user"}">Podle uživatele</button></div>
+    </div>
+    <label style="display:flex;gap:8px;align-items:center"><span class="label">Uživatel</span>
+      <select id="au"><option value="all">Všichni</option>${USERS.map(u => `<option value="${u.id}" ${S.archUser === u.id ? "selected" : ""}>${esc(u.name)}</option>`).join("")}</select></label>
+  </div>
+  <div>${list.length ? [...groups].map(([k, arr]) => `<div class="group"><h3>${esc(k)} <span class="muted small">(${arr.length})</span></h3>${arr.map(a => {
+    const u = USERS.find(x => x.id === a.user), d = new Date(a.at);
+    return `<div class="arow"><span class="fn">${esc(a.file)}${a.example ? '<span class="tag">ukázka</span>' : ""}</span><span class="small">${esc(u.name)}</span><span class="small num">${fmtDate(d)}<br><span class="muted">${fmtTime(d)}</span></span><span class="small">${a.items} položek<br><span style="color:${a.check ? "var(--mark-fg)" : "var(--ok)"}">${a.check} ke kontrole</span></span><span class="num small">${kc0(a.total)}</span><button class="btn small" data-open="${a.id}">Otevřít</button></div>`;
+  }).join("")}</div>`).join("") : `<p class="muted">Tenhle uživatel zatím nic nenaceňoval.</p>`}</div>`;
+  main.querySelectorAll("[data-g]").forEach(b => b.onclick = () => { S.archGroup = b.dataset.g; store.set("group", S.archGroup); render(); });
+  document.getElementById("au").onchange = e => { S.archUser = e.target.value; render(); };
+  main.querySelectorAll("[data-open]").forEach(b => b.onclick = () => {
+    const a = S.archive.find(x => x.id === b.dataset.open);
+    if (!a.live) a.live = makeJob(sampleBytes(a.sample).bytes, a.file, a.user, new Date(a.at));
+    S.job = a.live; S.step = 99; S.filter = "all"; S.view = "result"; render();
+  });
+}
+
+// ---------- Start ----------
+S.archGroup = store.get("group", "date");
+try { S.archive = seedArchive(); } catch (e) { S.archive = []; }
+render();
+</script>
+
+</body>
+</html>
